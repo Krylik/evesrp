@@ -1,6 +1,6 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
-from .killmail import CRESTMail, ZKillmail
+from .killmail import CRESTMail, ZKillmail, ESIMail
 
 CSRF_ENABLE = True
 
@@ -15,7 +15,7 @@ SQLALCHEMY_DATABASE_URI = 'sqlite://'
 SQLALCHEMY_TRACK_MODIFICATIONS = False
 
 # CREST killmails don't have any external dependencies
-SRP_KILLMAIL_SOURCES = [ZKillmail, CRESTMail]
+SRP_KILLMAIL_SOURCES = [ZKillmail, ESIMail, CRESTMail]
 
 SRP_SITE_NAME = 'EVE-SRP'
 

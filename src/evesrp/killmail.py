@@ -425,3 +425,64 @@ class CRESTMail(Killmail, RequestsSessionMixin, LocationMixin):
     # TRANS: Description of the allowable links for the CREST killmail
     # processor.
     description = lazy_gettext(u'A CREST external killmail link.')
+
+
+class ESIMail(Killmail, RequestsSessionMixin, LocationMixin):
+    """A killmail with data sourced from an ESI killmail link."""
+
+    esi_regex = re.compile(r'/killmails/(?P<kill_id>\d+)/[0-9a-f]+/')
+
+    def __init__(self, url, **kwargs):
+        """Create a killmail from an ESI killmail link.
+
+        :param str url: the ESI killmail URL.
+        :raises ValueError: if ``url`` is not an ESI URL.
+        :raises LookupError: if the ESI API response is in an unexpected
+            format.
+        """
+        super(ESIMail, self).__init__(**kwargs)
+        self.url = url
+        match = self.esi_regex.search(self.url)
+        if match:
+            self.kill_id = int(match.group('kill_id'))
+        else:
+            # TRANS: The %(url)s in this case will be replaced with the
+            # offending URL.
+            raise ValueError(gettext(u"'%(url)s' is not a valid ESI killmail",
+                    url=self.url))
+        parsed = urlparse(self.url, scheme='https')
+        if parsed.netloc == '':
+            parsed = urlparse('//' + url, scheme='https')
+            self.url = parsed.geturl()
+        # Check if it's a valid ESI URL
+        resp = self.requests_session.get(self.url)
+        # JSON responses are defined to be UTF-8 encoded
+        if resp.status_code != 200:
+            # TRANS: The %s here will be replaced with the (non-localized
+            # probably) error from CCP.
+            raise LookupError(gettext(u"Error retrieving ESI killmail: "
+                                      u"%(error)s",
+                                      error=resp.json()[u'message']))
+        try:
+            json = resp.json()
+        except ValueError as e:
+            # TRANS: The %(code)d in this message will be replaced with the
+            # HTTP status code recieved from CCP.
+            raise LookupError(gettext(u"Error retrieving killmail data: "
+                                      u"%(code)d", code=resp.status_code))
+        victim = json.get(u'victim', {})
+        self.pilot_id = victim.get(u'character_id', None)
+        self.corp_id = victim.get(u'corporation_id', None)
+        self.alliance_id = victim.get(u'alliance_id', None)
+        self.ship_id = victim.get(u'ship_type_id', None)
+        self.system_id = json.get(u'solar_system_id')
+        # ESI Killmails are always verified
+        self.verified = True
+        # Parse the timestamp
+        time_struct = time.strptime(json.get(u'killmail_time'), '%Y-%m-%dT%H:%M:%SZ')
+        self.timestamp = dt.datetime(*(time_struct[0:6]),
+                tzinfo=utc)
+
+    # TRANS: Description of the allowable links for the ESI killmail
+    # processor.
+    description = lazy_gettext(u'An ESI external killmail link.')
