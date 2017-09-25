@@ -7,7 +7,7 @@ from functools import partial
 import re
 import sys
 import six
-from .util import unistr, urlparse, urlunparse, utc
+from .util import unistr, urlparse, urlunparse, utc, esi
 
 from flask import Markup, current_app
 from flask_babel import gettext, lazy_gettext
@@ -448,8 +448,8 @@ class ESIMail(Killmail, RequestsSessionMixin, LocationMixin):
         else:
             # TRANS: The %(url)s in this case will be replaced with the
             # offending URL.
-            raise ValueError(gettext(u"'%(url)s' is not a valid ESI killmail",
-                    url=self.url))
+            raise ValueError(gettext(
+                u"'%(url)s' is not a valid ESI killmail", url=self.url))
         parsed = urlparse(self.url, scheme='https')
         if parsed.netloc == '':
             parsed = urlparse('//' + url, scheme='https')
@@ -472,17 +472,29 @@ class ESIMail(Killmail, RequestsSessionMixin, LocationMixin):
                                       u"%(code)d", code=resp.status_code))
         victim = json.get(u'victim', {})
         self.pilot_id = victim.get(u'character_id', None)
+        self.pilot = esi.CharacterLookup(
+            self.pilot_id, self.requests_session).name
         self.corp_id = victim.get(u'corporation_id', None)
+        self.corp = esi.CorporationLookup(
+            self.corp_id, self.requests_session).name
         self.alliance_id = victim.get(u'alliance_id', None)
+        self.alliance = esi.AllianceLookup(
+            self.alliance_id, self.requests_session).name
         self.ship_id = victim.get(u'ship_type_id', None)
         self.system_id = json.get(u'solar_system_id')
         # ESI Killmails are always verified
         self.verified = True
         # Parse the timestamp
-        time_struct = time.strptime(json.get(u'killmail_time'), '%Y-%m-%dT%H:%M:%SZ')
-        self.timestamp = dt.datetime(*(time_struct[0:6]),
-                tzinfo=utc)
+        time_struct = time.strptime(
+            json.get(u'killmail_time'), '%Y-%m-%dT%H:%M:%SZ')
+        self.timestamp = dt.datetime(*(time_struct[0:6]), tzinfo=utc)
 
     # TRANS: Description of the allowable links for the ESI killmail
     # processor.
     description = lazy_gettext(u'An ESI external killmail link.')
+
+    @property
+    def ship(self):
+        """Looks up the ship name using :py:attr:`Killmail.ship_id`.
+        """
+        return esi.ItemLookup(self.ship_id, self.requests_session).name
